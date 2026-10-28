@@ -72,10 +72,27 @@ function card(key, label, note, undo) {
   c.querySelector(".dim").textContent = note;
   p.appendChild(c);
 }
-// applied on this phone, not yet synced: hide the open row, show a card with Undo
+// applied on this phone, not yet synced: move the full row into Applied with Undo (a plain card if the row
+// lives on the other page)
 function shift(key, label) {
-  document.querySelectorAll("tr[data-key]").forEach(t => { if (t.dataset.key === key && !t.closest("#applied")) t.remove(); });
-  card(key, label, "Marked applied on this phone. Saved for good at the next sync (9am or 5pm).", true);
+  const rows = [...document.querySelectorAll("tr[data-key]")].filter(t => t.dataset.key === key && !t.closest("#applied"));
+  const body = document.querySelector("#applied tbody");
+  if (rows.length && body && ![...body.children].some(t => t.dataset.key === key)) {
+    const tr = rows[0].cloneNode(true);
+    tr.dataset.pending = "1";
+    const st = tr.querySelector("td[data-label=Closes]");
+    if (st) { st.dataset.label = "Status"; st.innerHTML = "<span class='pill good'>applied</span> <span class='dim'>syncs 9am / 5pm</span>"; }
+    const b = tr.querySelector("button.mark");
+    if (b) { b.className = "undo"; b.textContent = "Undo"; }
+    tr.querySelectorAll(".tag.new").forEach(t => t.remove());
+    body.prepend(tr);
+    document.getElementById("applied-wrap").hidden = false;
+    const n = document.getElementById("none-yet");
+    if (n) n.remove();
+  } else if (!rows.length) {
+    card(key, label, "Marked applied on this phone. Saved for good at the next sync (9am or 5pm).", true);
+  }
+  rows.forEach(t => t.remove());
 }
 // undo of a synced application: hide it from Applied until the sync moves it back
 function unshift(key, label) {
@@ -100,9 +117,9 @@ document.addEventListener("click", e => {
     if (!confirm("Mark as applied? " + label)) return;
     m[key] = {action: "applied", label, sent: Date.now()}; save(m);
     send(key, "applied"); shift(key, label);
-  } else if (b.closest(".card")) {
+  } else if (b.closest(".card") || b.closest("tr[data-pending]")) {
     // undo before the sync: forget the mark and put the role back
-    const key = b.closest(".card").dataset.key;
+    const key = (b.closest(".card") || b.closest("tr")).dataset.key;
     delete m[key]; save(m); send(key, "undo"); location.reload();
   } else {
     const tr = b.closest("tr"), key = tr.dataset.key, label = labelOf(tr);
